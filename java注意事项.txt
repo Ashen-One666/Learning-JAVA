@@ -1,0 +1,6 @@
+1. 
+问题：cmd编译.java文件时报错： 错误: 编码GBK的不可映射字符
+原因：.java文件使用UTF-8编码，而控制台使用GBK编码
+解决方法：
+（法1） javac ###.java  变为  javac -encoding UTF-8 ###.java
+（法2）首先在cmd界面输入 chcp 65001 修改界面代码
