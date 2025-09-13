@@ -1,3 +1,7 @@
+# 启动方式
+- dockerfile 写完之后执行 docker build 生成容器
+- 然后再执行 docker compose up -d 一键启动
+
 # docker命令 (以id为660，名称为mynginx的nginx容器为例)
 
 ## 一、查看、删除

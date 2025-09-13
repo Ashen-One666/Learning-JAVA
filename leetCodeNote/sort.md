@@ -1,45 +1,41 @@
 # 快速排序
 ## 模板1
 ```java
-public static void quickSort(int[] arr, int low, int high) {
-    if (low < high) {
-        // 分区操作，返回基准元素的最终位置
-        int pivotIndex = partition(arr, low, high);
-        
-        // 递归排序左半部分
-        quickSort(arr, low, pivotIndex - 1);
-        
-        // 递归排序右半部分
-        quickSort(arr, pivotIndex + 1, high);
-    }
+Random random = new Random();
+
+// 入口
+void qsort(int[] nums, int l, int r){
+    if(nums == null || nums.length == 0) return;
+    sort(nums, l, r);
 }
 
-// 分区操作：将数组分为两部分，基准元素的左边小于基准元素，右边大于基准元素
-private static int partition(int[] arr, int low, int high) {
-    // 选择基准元素（通常选最后一个元素）
-    int pivot = arr[high];
-    int i = low - 1; // i 表示小于基准元素的最后一个元素的索引
-    
-    // 遍历数组，将小于基准的元素移到左边
-    for (int j = low; j < high; j++) {
-        if (arr[j] <= pivot) { // 允许相等的元素与基准元素交换位置
-            i++;
-            // 交换元素
-            swap(arr, i, j);
-        }
+void sort(int[] nums, int l, int r){
+    if(l >= r) return;
+    int pid = random.nextInt(r - l + 1) + l;
+    int pivot = nums[pid];
+    swap(nums, pid, r);
+    int le = l;
+    int ge = r - 1;
+    while(true){
+        while(le <= ge && nums[le] < pivot) le++;
+        while(le <= ge && nums[ge] > pivot) ge--;
+        // le 来到了第一个大于等于 pivot 的位置
+        // ge 来到了第一个小于等于 pivot 的位置
+        if(le >= ge) break;
+        swap(nums, le, ge);
+        le++;
+        ge--;
     }
-    
-    // 将基准元素放到正确的位置
-    swap(arr, i + 1, high);
-    
-    return i + 1; // 返回基准元素的位置
+    swap(nums, le, r);
+    sort(nums, l, le - 1);
+    sort(nums, le + 1, r);
 }
 
-// 交换两个元素
-private static void swap(int[] arr, int i, int j) {
-    int temp = arr[i];
-    arr[i] = arr[j];
-    arr[j] = temp;
+void swap(int[] nums, int i, int j){
+    if(i == j) return;
+    int tmp = nums[i];
+    nums[i] = nums[j];
+    nums[j] = tmp;
 }
 ```
 

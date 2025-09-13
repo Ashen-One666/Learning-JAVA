@@ -240,6 +240,12 @@ https://blog.csdn.net/bigtree_3721/article/details/75947762
 - TransactionInterceptor 包含了前置和后置拦截方法，AOP会自动的在方法前后对应的位置执行。
 - 前置方法包括了开启事务、设置事务上下文等操作， 后置方法包括提交事务或回滚事务。
 
+# 三级缓存
+https://zhuanlan.zhihu.com/p/610322151
+
+循环依赖处理流程图：
+![循环依赖处理流程.jpg](images%2F%E5%BE%AA%E7%8E%AF%E4%BE%9D%E8%B5%96%E5%A4%84%E7%90%86%E6%B5%81%E7%A8%8B.jpg)
+
 # 循环依赖为什么用三级缓存而非二级缓存？
 https://zhuanlan.zhihu.com/p/377878056  
 并不是说二级缓存如果存在aop的话就无法将代理对象注入的问题，本质应该说是初始spring是没有解决循环引用问题的，
@@ -253,6 +259,7 @@ aop的实现需要与bean的正常生命周期的创建分离； 这样只有使
 所以说，当出现代理对象间的循环引用，提前代理是不可避免的，但是如果我们都直接提前代理，那对于原本没有循环依赖的代理对象，实际上是破坏了它们创建的顺序，作者指的应该是没有循环依赖的代理对象。
 总结：
 - 尽可能避免在实例化阶段就开始代理，只在发生循环依赖时提前代理，没有循环依赖就不会提前代理
+- （Spring无论是否存在循环依赖，在创建bean实例时都会创建bean的工厂并放入3级缓存中，但是否要使用factory是由是否存在循环依赖决定的，如果没有循环依赖，则直接移除3级缓存并放入1级缓存，不涉及到factory的创建bean方法）
 - 有构造器注入，不一定会产生问题，具体得看是否都是构造器注和 BeanName 的字母序
 
 
@@ -390,4 +397,59 @@ User user = new User.UserBuilder("Alice", 25)  // 必填字段
 - 开发者可专注于业务逻辑
 - 便于维护扩展
 
+
+# 2025.09.01
+## Spring 创建Bean过程
+### 1. 加载Bean
+- 准备Bean，通过@Component 或 @Bean 方式指定Bean。前者通过 ClassPathBeanDefinitionScanner 扫描 @ComponentScan 注解中指定的包下的类，
+后者通过 ConfigurationClassPostProcessor 解析配置类，扫描其中 @Bean 方法，然后将得到的类信息封装成 BeanDefinition ，再加载进 BeanDefinitionRegistry。
+
+### 2. 实例化Bean
+- 2.1 实例化前，容器先尝试从三级缓存中获取Bean，如果无法获取则开始实例化流程
+- 2.2 通过 BeanDefinition 判断 Bean 是单例还是原型，并走不同的流程
+- 2.3 开始实例化，调用 getSingleton() 方法，传入 对象工厂（实际是lambda表达式）。
+  - （注意：对象工厂负责通过反射创建Bean实例， getSingleton 负责缓存 Bean 和处理缓存依赖）
+- 2.4 将当前 Bean 加入 “创建中”集合
+- 2.4 调用对象工厂的getObject方法，底层通过反射技术获取构造参数将对象创建了出来，此时的对象只是通过空参构造创建出来的对象，他并没有任何的属性
+- 2.5 调用 addSingletonFactory 将实例化完成的bean加入到三级缓存
+
+### 3. 属性填充
+- 3.1 populateBean 该方法是填充属性的入口，传入beanName和BeanDefinition
+- 3.2 从 BeanDefinition 中获取属性注入相关信息然后判断是名称注入还是类型注入
+- 3.3 调用 getSingleton 从容器中获取依赖对象，若是获取不到则会重走对象创建的整个流程，拿到完整对象后将其给到当前bean的属性
+
+### 4. 初始化Bean 
+（主要动作： aware接口的处理，postprocessor接口的处理，初始化的处理）
+- 4.1 判断Bean是否实现Aware接口，有则执行其实现类，提供其需要感知的 Spring 容器内部信息
+  - BeanNameAware → 注入当前 Bean 的名字
+  - BeanFactoryAware → 注入 BeanFactory
+  - ApplicationContextAware → 注入 ApplicationContext
+- 4.2 获取容器中所有postprocessor接口，然后开始执行其前置方法
+  - 可理解为 Bean 初始化的拦截器链
+- 4.3 处理 InitializingBean & init-method
+
+### 5. 后置操作
+- 5.1 将bean从创建中的集合中删除
+- 5.2 将bean加入到单例池中将其从二级三级缓存中删除
+
+### 示例图
+![生命周期.jpg](images%2F%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F.jpg)
+
+## @Component 和 @Bean 区别
+### @Component:
+- 用途: @Component是一个泛化的定义，用于标识任何Spring管理组件。
+- 范围: @Component注解可以用于类级别，表示整个类作为一个组件，通常与Spring的组件扫描机制结合使用。
+- 配置方式: 基于类的配置，适用于没有特殊要求的普通组件。
+- 构建方式： 反射创建
+
+### @Bean:
+- 用途: @Bean通常用于方法级别，用于定义一个由方法返回的bean。
+- 范围: @Bean注解通常在@Configuration类中使用，与方法关联。
+- 配置方式: 基于方法的配置，适用于自定义、复杂或需要特殊处理的bean。
+- 构建方式： 为了保证单例，是先将 配置类 包装成代理类，再调用 @Bean 方法，保证仅调用一次
+
+## Spring 生命周期扩展点
+### 容器级的方法（BeanPostProcessor 一系列接口）
+接口的实现类是独立于 Bean 的，并且会注册到 Spring 容器中。Spring 容器创建任何 Bean 的时候，这些后处理器都会发生作用。  
+举例：postProcessAfterInitialization 方法，在初始化后阶段使用，是AOP生成代理对象的关键
 
